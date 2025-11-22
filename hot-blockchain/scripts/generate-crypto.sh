@@ -60,6 +60,11 @@ print_error() {
     echo -e "${RED}✗ ERROR: $1${NC}"
 }
 
+# Function to print info
+print_info() {
+    echo -e "${BLUE}ℹ $1${NC}"
+}
+
 # Function to wait for CA to be ready
 wait_for_ca() {
     local ca_url=$1
@@ -82,6 +87,23 @@ wait_for_ca() {
     print_error "$ca_name failed to start after $max_attempts attempts"
     exit 1
 }
+
+# ============================================================================
+# STEP 0: Clean up and prepare directories
+# ============================================================================
+
+print_section "STEP 0: Preparing crypto-config directories"
+
+# Clean up any existing crypto-config with proper permissions
+if [ -d "${CRYPTO_DIR}" ]; then
+    print_info "Removing existing crypto-config directory..."
+    # Use sudo to remove in case files are owned by root from previous Docker operations
+    sudo rm -rf "${CRYPTO_DIR}"
+fi
+
+# Create fresh crypto-config directory with proper ownership
+mkdir -p "${CRYPTO_DIR}"
+print_success "Crypto-config directory prepared"
 
 # ============================================================================
 # STEP 1: Start Certificate Authority containers
@@ -114,18 +136,25 @@ mkdir -p "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/tlsca"
 
 # Get CA root certs
 curl -sSf -k ${ORDERER_CA_URL}/cainfo | jq -r '.result.CAChain' | base64 -d > "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/ca/ca-cert.pem" 2>/dev/null || \
-  docker cp ca.ordererorg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/ca/ca-cert.pem"
+  { docker cp ca.ordererorg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/ca/ca-cert.pem" && \
+    sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/ca"; }
 
 curl -sSf -k ${ORDERER_TLSCA_URL}/cainfo | jq -r '.result.CAChain' | base64 -d > "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/tlsca/tls-cert.pem" 2>/dev/null || \
-  docker cp tlsca.ordererorg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/tlsca/tls-cert.pem"
+  { docker cp tlsca.ordererorg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/tlsca/tls-cert.pem" && \
+    sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}/ordererOrganizations/ordererorg.hot.coc.com/tlsca"; }
 
 curl -sSf -k ${LABORG_CA_URL}/cainfo | jq -r '.result.CAChain' | base64 -d > "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/ca/ca-cert.pem" 2>/dev/null || \
-  docker cp ca.laborg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/ca/ca-cert.pem"
+  { docker cp ca.laborg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/ca/ca-cert.pem" && \
+    sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/ca"; }
 
 curl -sSf -k ${LABORG_TLSCA_URL}/cainfo | jq -r '.result.CAChain' | base64 -d > "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/tlsca/tls-cert.pem" 2>/dev/null || \
-  docker cp tlsca.laborg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/tlsca/tls-cert.pem"
+  { docker cp tlsca.laborg.hot.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/tlsca/tls-cert.pem" && \
+    sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}/peerOrganizations/laborg.hot.coc.com/tlsca"; }
 
 print_success "CA root certificates obtained"
+
+# Ensure all crypto-config is owned by current user
+sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}"
 
 # OrdererOrg Identity CA Admin
 print_section "Enrolling OrdererOrg Identity CA Admin"

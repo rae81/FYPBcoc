@@ -63,6 +63,11 @@ print_error() {
     echo -e "${RED}✗ ERROR: $1${NC}"
 }
 
+# Function to print info
+print_info() {
+    echo -e "${BLUE}ℹ $1${NC}"
+}
+
 # Function to wait for CA to be ready
 wait_for_ca() {
     local ca_url=$1
@@ -85,6 +90,23 @@ wait_for_ca() {
     print_error "$ca_name failed to start after $max_attempts attempts"
     exit 1
 }
+
+# ============================================================================
+# STEP 0: Clean up and prepare directories
+# ============================================================================
+
+print_section "STEP 0: Preparing crypto-config directories"
+
+# Clean up any existing crypto-config with proper permissions
+if [ -d "${CRYPTO_DIR}" ]; then
+    print_info "Removing existing crypto-config directory..."
+    # Use sudo to remove in case files are owned by root from previous Docker operations
+    sudo rm -rf "${CRYPTO_DIR}"
+fi
+
+# Create fresh crypto-config directory with proper ownership
+mkdir -p "${CRYPTO_DIR}"
+print_success "Crypto-config directory prepared"
 
 # ============================================================================
 # STEP 1: Start Certificate Authority containers
@@ -128,6 +150,10 @@ docker cp ca.courtorg.cold.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem
 docker cp tlsca.courtorg.cold.coc.com:/etc/hyperledger/fabric-ca-server/ca-cert.pem "${CRYPTO_DIR}/peerOrganizations/courtorg.cold.coc.com/tlsca/tls-cert.pem"
 
 print_success "CA root certificates obtained"
+
+# Fix ownership of all copied files
+sudo chown -R $(whoami):$(whoami) "${CRYPTO_DIR}"
+print_info "Fixed ownership of crypto materials"
 
 # Enroll CA Admins
 print_section "Enrolling CA Admins"
